@@ -1,0 +1,243 @@
+clear all; close all; clc;
+
+%code based off Anja Deric's Spring 2020 Solution as well as 
+%functions and code provided on Professor Deniz's class
+%google drive
+
+%%sample generation
+%generate demensions and number of samples
+n = 2;
+N =10000;
+
+%class 0 parameters (mixture of two gaussians)
+mu(:,1) = [3;0]; covarMat(:,:,1) = [2 0; 0 1];
+mu(:,2) = [0;3]; covarMat(:,:,2) = [1 0; 0 2];
+mixCofficients = [.5 .5];
+
+
+%class 1 parameter (one gaussian)
+mu(:,3) = [2;2]; covarMat(:,:,3) = [1 0; 0 1];
+
+%class priors
+classPriors = [.65,.35];
+
+%true class labels
+labels = rand(1,N) >= classPriors(1);
+Nc = [length(find(labels==0)),length(find(labels==1))];
+
+%draw and plot samples
+samp = zeros(n,N);
+
+for i = 1: N
+    %class 0 samples
+    if labels(i) == 0
+        if(rand(1,1) > mixCofficients(1)) == 0
+            samp(:,i) = mvnrnd(mu(:,1),covarMat(:,:,1),1)';
+        else
+            samp(:,i) = mvnrnd(mu(:,2),covarMat(:,:,2),1)';
+        end
+    end
+end
+
+%class 1 samples
+samp(:,labels==1) = mvnrnd(mu(:,3),covarMat(:,:,3),Nc(2))';
+
+%plotting samples
+figure(1);
+plot(samp(1,labels == 0), samp(2,labels==0),'o',samp(1,labels == 1), samp(2,labels==1),'+');
+title('Class 0 vs. Class 1')
+xlabel('x1'); ylabel('x2');
+legend('Class 0', 'Class 1');
+%% question 1.1
+%evaluate the probabilty og x for each class
+pxClass0 = .5*evalGaussianPDF(samp,mu(:,1),covarMat(:,:,1))+.5*evalGaussianPDF(samp,mu(:,2),covarMat(:,:,2));
+pxClass1 =  evalGaussian(samp,mu(:,3),covarMat(:,:,3));
+
+%evaluate the discrimant scores
+discriminant = log(pxClass1./pxClass0);
+
+%get the prob. of false label, true label, and overall error for different
+%threshold values
+[falseLabel,trueLabel,error,thresholds] = ROCcurve(discriminant, labels);
+
+%find the place with the minimum amount of error and store its index
+[minErr, minInd] = min(error);
+
+%find the point on the ROC curve that minimzes error
+minFalse = falseLabel(minInd); minTrue = trueLabel(minInd);
+
+%using said index, find the threshold that yields the minimum amount of
+%error
+theorticalMinThreshold = classPriors(1)/classPriors(2);
+actualMinThreshold = exp(thresholds(minInd));
+
+%calculate theortical values for minimum
+theorMin = (discriminant >= log(classPriors(1)/classPriors(2)));
+theorFalse = sum(theorMin == 1 & labels == 0)/Nc(1);
+theorTrue = sum(theorMin == 1 & labels == 1)/Nc(2);
+theorErr = theorFalse*classPriors(1) + (1-theorTrue)*classPriors(2);
+
+%plot ROC curve, calculated minimum, and theortical minimum
+figure(2); plot(falseLabel,trueLabel,'-', minFalse, minTrue, 'ro',theorFalse,theorTrue,'g+');
+title('ROC Curve')
+xlabel('Probability of false alarm'); ylabel('Probability of true label');
+legend('ROC Curve', 'Calculated minimum error', 'Theortical Minimum Error');   
+%% question 1.2
+%LDA Setup
+meanVC0 = mean(samp(:,labels==0),2); S1hat = cov(samp(:,labels==0)');
+meanVC1 = mean(samp(:,labels==1),2); S2hat = cov(samp(:,labels==1)');
+
+Sb = (meanVC0-meanVC1)*(meanVC0-meanVC1)';
+Sw = S1hat + S2hat;
+
+[V,D] = eig(inv(Sw)*Sb);
+[~,ind] = sort(diag(D),'descend');
+w = V(:,ind(1)); % Fisher LDA projection vector
+
+% Linearly project the data from both categories on to w
+yLDA = w'*samp;
+
+w = sign(mean(yLDA(find(labels==1)))-mean(yLDA(find(labels==0))))*w; % ensures class1 falls on the + side of the axis
+yLDA = sign(mean(yLDA(find(labels==1)))-mean(yLDA(find(labels==0))))*yLDA;
+
+figure(3);
+plot(yLDA(find(labels==0)),zeros(1,Nc(1)),'o', yLDA(find(labels==1)),zeros(1,Nc(2)),'+');
+title('LDA Projection')
+
+[falseLabelLDA,trueLabelLDA,errorLDA,thresholdsLDA] = ROCcurve(yLDA, labels);
+
+%find the place with the minimum amount of error and store its index
+[minErrLDA, minIndLDA] = min(errorLDA);
+
+%find the point on the ROC curve that minimzes error
+minFalseLDA = falseLabelLDA(minIndLDA); minTrueLDA = trueLabelLDA(minIndLDA);
+
+%using said index, find the threshold that yields the minimum amount of
+%error
+actualMinThresholdLDA = thresholdsLDA(minIndLDA);
+
+%plot ROC curve, calculated minimum, and theortical minimum
+figure(4); plot(falseLabelLDA,trueLabelLDA,'-', minFalseLDA, minTrueLDA, 'ro');
+%figure(5); plot(thresholdsLDA,errorLDA,'-');
+title('LDA ROC Curve')
+xlabel('Probability of false alarm'); ylabel('Probability of true label');
+legend('LDA Minimum Error');   
+
+% %% question 2.1
+C = 3;
+N = 10000; % Number of samples
+n = 3; % Data dimensionality (must be 3 for plots to work)
+
+priors = [.3 .3 .4];
+
+create for gaussian sample means and covarince matrices 
+meanVect(:,1)=[2;2;2]; sigma(:,:,1) = 2*[1 0 0; 0 1 0; 0 0 1];
+meanVect(:,2)=[4;2;4]; sigma(:,:,2) = 2*[1 0 0; 0 1 0; 0 0 1];
+meanVect(:,3)=[6;4;2]; sigma(:,:,3) = 2*[1 0 0; 0 1 0; 0 0 1];
+meanVect(:,4)=[7;7;7]; sigma(:,:,4) = 4*[1 0 0; 0 1 0; 0 0 1];
+
+samp2 = zeros(n,N); labels1 = zeros(1,N); 
+
+Decide randomly which samples will come from each component
+u = rand(1,N); thresholds = [cumsum(priors),1];
+for i = 1:C
+    indl = find(u <= thresholds(i)); Nl = length(indl);
+    labels1(1,indl) = i*ones(1,Nl);
+    u(1,indl) = 1.1*ones(1,Nl); % these samples should not be used again
+    if i~=3
+        samp2(:,indl) = mvnrnd(meanVect(:,i),sigma(:,:,i),Nl)';
+    end
+    
+    for the third class, randomly pick from which gaussian a sample will
+    come 
+    if i == 3
+        if (rand(1,1) > .5 )== 0
+            samp2(:,indl) = mvnrnd(meanVect(:,3),sigma(:,:,3),Nl)';
+        else
+            samp2(:,indl) = mvnrnd(meanVect(:,4),sigma(:,:,4),Nl)';
+        end
+    end 
+end
+
+plot samples
+figure(6);
+plot3(samp2(1,labels1 == 1), samp2(2,labels1==1), samp2(3,labels1 == 1),'o',samp2(1,labels1 == 2), samp2(2,labels1==2), samp2(3,labels1 == 2),'+',samp2(1,labels1 == 3), samp2(2,labels1==3), samp2(3,labels1 == 3),'x');
+title('Class 1, 2, 3 True Labels')
+xlabel('x1'); ylabel('x2'); zlabel('x3');
+legend('Class 1', 'Class 2', 'Class 3');   
+
+for i = 1:C
+    if i ==3
+        pxgiveni(i,:) = .5*evalGaussianPDF(samp2,meanVect(:,3),sigma(:,:,3))+.5*evalGaussianPDF(samp2,meanVect(:,4),sigma(:,:,4));
+    end
+    pxgiveni(i,:) = evalGaussianPDF(samp2,meanVect(:,i),sigma(:,:,i)); % Evaluate p(x|L=l)
+end
+
+px = priors*pxgiveni; % Total probability theorem
+classPosteriors = pxgiveni.*repmat(priors',1,N)./repmat(px,C,1); % P(L=l|x)
+
+lossMatrix = ones(C,C)-eye(C); % For min-Perror design, use 0-1 loss
+expectedRisks = lossMatrix*classPosteriors; % Expected Risk for each label (rows) for each sample (columns)
+[~,decisions] = min(expectedRisks,[],1); % Minimum expected risk decision with 0-1 loss is the same as MAP
+
+mShapes = 'o+x';
+figure(7), clf,
+mColors = 'rg';
+for d = 1:C % each decision option
+    for l = 1:C % each class label
+        ind_dl = find(decisions==d & labels1==l);
+        ConfusionMatrix(d,l) = length(ind_dl)/length(find(labels1==l));
+        if d == l
+            plot3(samp2(1,ind_dl),samp2(2,ind_dl),samp2(3,ind_dl),strcat(mShapes(l),mColors(2))); hold on; axis equal;
+        else
+            plot3(samp2(1,ind_dl),samp2(2,ind_dl),samp2(3,ind_dl),strcat(mShapes(l),mColors(1))); hold on; axis equal;
+        end
+    end
+end
+title('Class 1, 2, 3 Classifcations 0-1 Loss')
+xlabel('x1'); ylabel('x2'); zlabel('x3');
+
+% question 2.2
+lossMatrix1 = [0 1 10; 1 0 10; 1 1 0;];
+lossMatrix2 = [0 1 100; 1 0 100; 1 1 0;]; % For min-Perror design, use 0-1 loss
+expectedRisks1 = lossMatrix1*classPosteriors;
+expectedRisks2 = lossMatrix2*classPosteriors;% Expected Risk for each label (rows) for each sample (columns)
+[~,decisions1] = min(expectedRisks1,[],1);% Minimum expected risk decision with 0-1 loss is the same as MAP
+[~,decisions2] = min(expectedRisks2,[],1);% Minimum expected risk decision with 0-1 loss is the same as MAP
+
+mShapes = 'o+x';
+figure(8), clf,
+mColors = 'rg';
+for d = 1:C % each decision option
+    for l = 1:C % each class label
+        ind_dl = find(decisions1==d & labels1==l);
+        ind_dl2 = find(decisions2==d & labels1==l);
+        ConfusionMatrix1(d,l) = length(ind_dl)/length(find(labels1==l));
+        if d == l
+            plot3(samp2(1,ind_dl),samp2(2,ind_dl),samp2(3,ind_dl),strcat(mShapes(l),mColors(2))); hold on; axis equal;
+        else
+            plot3(samp2(1,ind_dl),samp2(2,ind_dl),samp2(3,ind_dl),strcat(mShapes(l),mColors(1))); hold on; axis equal;
+        end
+    end
+end
+title('Class 1, 2, 3 Classifcations 0-10 Loss')
+xlabel('x1'); ylabel('x2'); zlabel('x3');
+ConfusionMatrix1
+minexpectedRisk = sum(sum(priors*lossMatrix1*ConfusionMatrix1))/N
+
+figure(9), clf,
+for d = 1:C % each decision option
+    for l = 1:C % each class label
+        ind_dl2 = find(decisions2==d & labels1==l);
+        ConfusionMatrix2(d,l) = length(ind_dl2)/length(find(labels1==l));
+        if d == l
+            plot3(samp2(1,ind_dl2),samp2(2,ind_dl2),samp2(3,ind_dl2),strcat(mShapes(l),mColors(2))); hold on; axis equal;
+        else
+            plot3(samp2(1,ind_dl2),samp2(2,ind_dl2),samp2(3,ind_dl2),strcat(mShapes(l),mColors(1))); hold on; axis equal;
+        end
+    end
+end
+title('Class 1, 2, 3 Classifcations 0-100 Loss')
+xlabel('x1'); ylabel('x2'); zlabel('x3');
+ConfusionMatrix2
+minexpectedRisk1 = sum(sum(priors*lossMatrix2*ConfusionMatrix2))/N
